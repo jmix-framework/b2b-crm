@@ -29,6 +29,8 @@ java {
 }
 
 repositories {
+    mavenLocal()
+
     mavenCentral()
 
     maven {
@@ -42,8 +44,9 @@ repositories {
     maven {
         url = 'https://maven.vaadin.com/vaadin-addons'
     }
+
     maven {
-        url = 'https://global.repo.jmix.io/repository/premium'
+        url = 'https://nexus.jmix.io/repository/premium'
         credentials {
             username = rootProject['premiumRepoUser']
             password = rootProject['premiumRepoPass']
@@ -52,17 +55,24 @@ repositories {
 }
 
 dependencies {
+    // for testing 5119
+    implementation 'io.jmix.kanban:jmix-kanban-flowui-starter'
+    implementation 'io.jmix.groupgrid:jmix-groupgrid-flowui-starter'
+    implementation 'io.jmix.pivottable:jmix-pivottable-flowui-starter'
+    implementation 'io.jmix.fullcalendar:jmix-fullcalendar-flowui-starter'
+
+    implementation 'io.jmix.maps:jmix-maps-starter'
+    implementation 'io.jmix.maps:jmix-maps-flowui-starter'
+
     implementation 'io.jmix.vcc:vaadin-dashboard-starter'
     implementation 'io.jmix.vcc:vaadin-spreadsheet-starter'
-    implementation 'io.jmix.kanban:jmix-kanban-flowui-starter'
-    implementation 'io.jmix.fullcalendar:jmix-fullcalendar-flowui-starter'
-    implementation 'io.jmix.pivottable:jmix-pivottable-flowui-starter'
+
     implementation 'io.jmix.search:jmix-search-starter'
     implementation 'io.jmix.search:jmix-search-opensearch-starter'
     implementation 'io.jmix.search:jmix-search-flowui-starter'
-    implementation 'io.jmix.notifications:jmix-notifications-flowui-starter'
+
     implementation 'io.jmix.notifications:jmix-notifications-starter'
-    implementation 'io.jmix.groupgrid:jmix-groupgrid-flowui-starter'
+    implementation 'io.jmix.notifications:jmix-notifications-flowui-starter'
 
     //              --- [ JMIX ] ---
 
