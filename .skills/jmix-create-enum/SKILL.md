@@ -9,6 +9,10 @@ Use this skill when an entity attribute has a fixed set of values.
 
 ## Steps
 
+0. **Look for an existing enum convention in the project first.** Many codebases
+   have a shared base interface that every enum implements, often with a default
+   `getId()` — see "Joining an existing enum family" below. Match it instead of
+   introducing a second scheme.
 1. Create the enum in the `entity` package.
 2. Implement `io.jmix.core.metamodel.datatype.EnumClass<T>`.
 3. Use stable database ids, not display labels.
@@ -72,10 +76,24 @@ Keep one consistent id type across `EnumClass<T>`, `getId()`/`fromId()`, the ent
 
 When binding an enum attribute in a view, use `<comboBox>` (its `Range` is an enumeration) — not `entityComboBox`, which is for entity associations.
 
+## Joining an existing enum family
+
+Before writing the template below, grep for a base interface the project's enums
+already implement:
+
+```bash
+grep -rn "implements .*EnumClass" src/main/java --include='*.java' | head
+```
+
+If one exists and its `getId()` returns `name()`, **match it**. The `.name()`
+prohibition below is about not introducing that scheme into a project that has no
+id convention yet — it is not a reason to make one new enum the only member of a
+family with a different id scheme.
+
 ## Forbidden
 
 - `io.jmix.core.EnumClass`.
 - Raw `EnumClass` without a type parameter.
 - Storing display labels as ids.
-- `ordinal()` or enum `.name()` persistence.
+- `ordinal()` persistence, or introducing `.name()` ids into a project that has no enum id convention yet (an established project-wide convention is matched, not split — see above).
 - Missing enum message keys.

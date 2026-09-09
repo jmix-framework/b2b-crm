@@ -14,7 +14,7 @@ Use this skill when creating a top-level list/search view for an entity.
 3. Add `@Route(value = "...", layout = MainView.class)`.
 4. Add `@ViewController(id = "Entity.list")`.
 5. Add `@ViewDescriptor(path = "entity-list-view.xml")`.
-6. Add `@LookupComponent("<entities>DataGrid")`.
+6. Add `@LookupComponent("<entities>DataGrid")` when the view can be opened as a lookup — an entity-picker dialog via `@PrimaryLookupView` or an explicit lookup builder call. A pure management/browse screen that is never used as a picker can omit it; the annotation only backs `getLookupComponent()`/`findLookupComponent()` in the lookup flow.
 7. Create XML descriptor with collection container, loader, `dataLoadCoordinator`, grid actions, toolbar buttons, and columns. Add `<urlQueryParameters>` when the view includes filter or pagination — always paired with the matching components (see below).
 8. Verify every JPQL query uses the JPA/Jmix entity name, not the database table name.
 9. Render a visible button for every grid action that users must trigger.
@@ -226,6 +226,48 @@ The same holds for every overridden view lifecycle method (`beforeEnter`,
 `afterNavigation`): do your work, then call `super`, on every code path. An
 early `return` before `super` is the defect.
 
+## Column widths — `rem` or px, never `em`
+
+```xml
+<column property="number" width="9rem"/>   <!-- RIGHT -->
+<column property="number" width="9em"/>    <!-- WRONG: header and body drift apart -->
+```
+
+`em` resolves against the font size of the element it is applied to, and the grid
+header and body cells are separate elements. Under the Lumo (compatibility) theme
+the header is deliberately smaller than the body (`--lumo-font-size-s` 14px against
+`--lumo-font-size-m` 16px): the same `9em` becomes 126px in the header and 144px in
+the body — 8/7 per column, accumulating rightwards until the last column is off by
+a wide margin. Under the default Aura theme the header font size currently equals
+the body's, so `em` happens to line up — but the defect is one token away:
+`--vaadin-grid-header-font-size` is a public knob, and any theme or project CSS that
+sets it re-opens the drift. Vaadin documents this on Grid: "Using the em length unit
+is discouraged as it might lead to misalignment issues if the header, body, and
+footer cells have different font sizes. Instead, use rem."
+
+The defect hides itself on narrow tables — the first columns line up — so a small
+grid gives no warning that the rule was broken.
+
+## Saved user settings outrank the descriptor
+
+Applies when the view declares a `<settings>` facet (e.g. `<settings auto="true"/>`).
+This skill's skeleton does not add one, but existing views often have it.
+
+The facet persists column width, order and visibility per user. Saved values are
+applied OVER the descriptor on open, they carry no version marker, and editing the
+descriptor does not invalidate them. The user does not have to touch anything:
+opening the view once is enough — a full snapshot of all columns is saved on leave.
+So after a descriptor change, the change is visible only to users who never opened
+that view.
+
+The symptom is indistinguishable from "the deployment did not arrive": new value in
+the source, old value on screen. And it disables verification — **until the saved
+settings are cleared, checking such a change in the browser proves nothing**, which
+makes a correct change look broken and invites a second "fix" of working code.
+
+After changing column width, order or visibility on a view with a settings facet,
+clear the stored settings for that view (`FLOWUI_USER_SETTINGS`) before verifying.
+
 ## Forbidden
 
 - Declaring actions without visible buttons or another reachable UI trigger.
@@ -239,3 +281,5 @@ early `return` before `super` is the defect.
 - Adding menu policy for dialog-only detail views.
 - A load delegate returning `LoadContext` instead of `List<E>` (the query never runs; the grid is empty at open).
 - An overridden `beforeEnter` that does not call `super.beforeEnter(event)` on every path (the auto-load never fires; the grid is empty).
+- `<column width="…em">` — header and body resolve `em` against different font sizes and drift apart.
+- On a view with a `<settings>` facet: verifying a change to column width, order or visibility in the browser without clearing saved user settings first — the check returns a false negative.

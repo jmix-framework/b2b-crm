@@ -145,6 +145,17 @@ Choose form components by property type:
 | Jmix enum | `select` or `comboBox` |
 | Entity reference | `entityComboBox` or `entityPicker` |
 
+For a `Boolean` property annotated with `@NotNull`, `false` is still a valid
+value: the constraint rejects only `null`. A bound checkbox inherits the
+required state from the entity metadata, but Vaadin treats an unchecked checkbox
+as empty. The form then rejects `false` and the save action leaves the view open.
+Declare `required="false"` explicitly so the checkbox can represent both Boolean
+values without weakening the entity constraint:
+
+```xml
+<checkbox id="subscribedField" property="subscribed" required="false"/>
+```
+
 Do not expose technical fields (`id`, `version`) in user-facing forms. Hide parent/default fields only when they are initialized elsewhere.
 
 ## Final XML Type Audit
@@ -154,7 +165,9 @@ After creating or editing the descriptor, inspect each field:
 - `Integer` is not a `textField`; use `integerField`.
 - `BigDecimal` is not a `textField`; use `bigDecimalField`.
 - Date/time properties use date/time picker components.
-- Boolean properties use checkbox or the project's boolean component pattern.
+- Boolean properties use checkbox or the project's boolean component pattern. A
+  checkbox bound to an `@NotNull Boolean` that may be `false` declares
+  `required="false"` explicitly.
 - Entity references use reference components, not text fields.
 
 If an existing project uses a different compiled pattern for a type, follow the existing pattern and keep it consistent.
@@ -266,6 +279,37 @@ component theme variants, `getStyle().set(...)`, `--aura-*` / `--lumo-*` tokens 
 is covered by `jmix-style-ui`. Read it before typing a CSS custom property: a
 token the active theme does not define fails silently and passes every gate.
 
+## Asking for confirmation before saving
+
+`ValidationEvent` can only REJECT a save; it cannot ask a question and continue.
+The only hook that suspends a save and resumes it afterwards is
+`StandardDetailView.BeforeSaveEvent` with `preventSave()` / `resume()`:
+
+```java
+@Autowired
+private Dialogs dialogs;
+
+@Subscribe
+public void onBeforeSave(final BeforeSaveEvent event) {
+    if (!reissuesRelatedCodes()) {
+        return;
+    }
+    event.preventSave();
+    dialogs.createOptionDialog()
+            .withHeader(messageBundle.getMessage("confirmDialog.header"))
+            .withText(messageBundle.getMessage("confirmDialog.text"))
+            .withActions(
+                    new DialogAction(DialogAction.Type.YES)
+                            .withHandler(e -> event.resume()),
+                    new DialogAction(DialogAction.Type.NO))
+            .open();
+}
+```
+
+Note `Dialogs.createOptionDialog()` takes NO view argument, unlike
+`createInputDialog(View)`. Without `preventSave()` the save runs on regardless of what
+a dialog is showing, so a home-made confirmation dialog does not hold anything back.
+
 ## Cross-field validation
 
 For cross-field/manual validation, add a `@Subscribe` handler on `ValidationEvent` and report failures via `event.getErrors().add("...")`; for programmatic checks (e.g. before a custom save) use the `ViewValidation` bean (`validateUiComponents`, `showValidationErrors`).
@@ -280,6 +324,8 @@ For cross-field/manual validation, add a `@Subscribe` handler on `ValidationEven
 - `itemsQuery` with unresolved `container_` or `component_` parameters.
 - Hardcoded labels or titles.
 - Hiding required fields without setting defaults elsewhere.
+- A checkbox bound to an `@NotNull Boolean` without `required="false"` when
+  unchecked `false` is a valid value.
 - Missing view policy for dialog-opened detail views.
 - A `class` attribute on a nested property-bound `<collection property="..."/>`.
 - `<markdown>` with an empty or absent `content` attribute (throws at view load), or a guessed `io.jmix.flowui...Markdown` import.

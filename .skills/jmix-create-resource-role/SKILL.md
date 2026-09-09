@@ -39,6 +39,15 @@ read-only even at creation (e.g. auto-generated audit fields), exclude them from
 `attributes` list or use a second `VIEW` policy for that subset — NOT a blanket
 `VIEW` on `*`.
 
+## Where attribute policies are enforced
+
+An attribute policy is enforced by the Flow UI value bindings and grid columns,
+and by `EntitySerialization` — NOT by `DataManager`. The data layer checks
+entity-level and row-level rules only. So a service, a scheduled job, or a custom
+controller running under the role's session persists an attribute the role was
+never granted, with no error. Guard the non-granted attributes in that code
+yourself; the policy will not do it for you.
+
 ## Requirement wording → policy actions
 
 Map the EXACT wording of the requirement to entity-policy actions. Re-read the
