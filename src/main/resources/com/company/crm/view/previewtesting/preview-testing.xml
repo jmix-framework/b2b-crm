@@ -8,6 +8,7 @@
       xmlns:dashb="http://jmix.io/schema/vaadin-dashboard/ui"
       xmlns:sprd="http://jmix.io/schema/vaadin-spreadsheet/ui"
       xmlns:groupg="http://jmix.io/schema/groupgrid/ui"
+      xmlns:ntf="http://jmix.io/schema/notifications/ui"
       title="msg://previewTesting.title">
     <data>
         <instance id="clientDc" class="com.company.crm.model.client.Client">
@@ -668,6 +669,20 @@
             <button id="actionOverrideButton" action="clientsDataGrid.clientsGridCreate"
                     text="Custom text" icon="STAR"/>
         </hbox>
+
+        <!-- 14. Components added after the original preview fixture -->
+        <h3 text="14. Sliders and notifications"/>
+        <integerSlider id="integerSliderSample" label="Integer slider" width="20em"
+                       min="0" max="100" step="5" value="35" minMaxVisible="true"/>
+        <decimalSlider id="decimalSliderSample" label="Decimal slider" width="20em"
+                       min="0" max="1" step="0.1" value="0.4" valueAlwaysVisible="true"/>
+        <integerRangeSlider id="integerRangeSliderSample" label="Integer range slider" width="20em"
+                            min="0" max="100" step="5" startValue="20" endValue="80"
+                            accessibleNameStart="Range start" accessibleNameEnd="Range end"/>
+        <decimalRangeSlider id="decimalRangeSliderSample" label="Decimal range slider" width="20em"
+                            min="0" max="1" step="0.1" startValue="0.2" endValue="0.8"/>
+        <ntf:notificationsIndicator id="notificationsIndicatorSample" icon="BELL"
+                                    maxVisibleUnreadCount="9" ariaLabel="Notifications"/>
 
     </layout>
 </view>
