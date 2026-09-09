@@ -45,6 +45,25 @@ flags the same Java errors a compile would). Rules when you use one:
   only generic/non-Jmix findings on a file you KNOW has a descriptor (a `*-view.xml`
   you just edited), treat the inspection as UNAVAILABLE for this run — do NOT call
   the file clean. Fall through to `compileJava` + the mechanical descriptor checks.
+- **Never trust an ALL-ERRORS result either — the IDE may not index the file.**
+  If the inspection reports "Cannot resolve symbol" for practically EVERY symbol,
+  including JDK types such as `String`, `List`, `Map`, that signature means "the
+  IDE is not indexing this file" — the result is garbage, not a broken file. The
+  bogus findings carry severity ERROR, so an errors-only filter does not remove
+  them; do NOT fix code from them. Disregard the whole result and fall back to
+  `compileJava` + the mechanical descriptor checks. For an XML-only edit, where
+  there are no JDK types to look for, the analogue is "message not found" on
+  `msg://` keys that grep DOES resolve in the module's `messages_*.properties`.
+  The most common cause is a git worktree nested under the project root (agent
+  tooling creates these routinely) while the IDE is opened on the main checkout:
+  the file IS inside the project directory, so the inspection accepts the path
+  and returns bogus findings instead of refusing loudly. Mechanical precondition
+  for any file type: `git rev-parse --show-toplevel` run in the edited file's
+  directory must equal `projectPath` — if it differs, the file lives in another
+  worktree and the inspection of that path is not authoritative. The same
+  signature also arises from a file outside any source root, a never-imported
+  Gradle project, or indexing lag right after files were written from outside
+  the IDE.
 - **A compile-only fallback leaves debt — record it.** When no inspection is
   connected, LIST the files that got only `compileJava` in your completion report,
   and re-inspect them the next time a session has the inspection available. A green
@@ -112,6 +131,11 @@ automatically a failure, but you MUST explain every hit (e.g. each `msg://` key
 must actually resolve in a `messages_*.properties`; each `= :` loader param must
 be bound/guarded).
 
+For `*-view.xml`, the file must start cleanly with an XML tag: either
+`<?xml ...?>` or `<view ...>`. Any BOM, whitespace, or stray content before the
+first `<` is a defect; it can surface as `SAXParseException: Content is not
+allowed in prolog`.
+
 ```bash
 # package line on every new .java (missing → view-registry / import breakage)
 find src/main/java -name '*.java' | while read f; do head -1 "$f" | grep -q '^package ' || echo "MISSING package: $f"; done
@@ -127,6 +151,8 @@ grep -rn "itemsQuery" src/main/resources --include='*-view.xml'
 grep -rn "com.vaadin.flow.component.dialog.Dialog" src/main/java --include='*.java'
 # every msg:// key must resolve in a messages_*.properties (else literal key renders)
 grep -rhoE 'msg://[^"<> ]+' src/main/resources --include='*.xml' | sort -u
+# no BOM / leading content before the XML tag (else SAX "Content is not allowed in prolog")
+find src/main/resources -name '*-view.xml' | while read f; do LC_ALL=C head -c 1 "$f" | grep -q '<' || echo "BAD XML prolog/BOM: $f"; done
 # no 0-byte source file (empty role drops policies; empty *-view.xml poisons registry)
 find src/main -type f \( -name '*.java' -o -name '*.xml' \) -size 0
 ```

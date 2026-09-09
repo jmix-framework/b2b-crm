@@ -239,6 +239,16 @@ So the defect survives `compileJava`, the Jmix inspection, and a green
 `clean test`. The rendering is merely wrong — no exception, no warning, nothing in
 the log.
 
+**CSS tokens do not resolve automatically in drawing APIs.** Some chart,
+diagram, or other components paint to a `<canvas>` and pass colour options
+directly to a JavaScript drawing API. Such APIs do not interpret `var(...)` as
+CSS. Before passing a theme token to a component option, check whether the
+component resolves CSS custom properties itself. If it does not, use the
+component's palette/theme API, a literal colour, or resolve the custom
+property first (for example with
+`getComputedStyle(...).getPropertyValue(...)`) and pass the resulting colour
+value.
+
 ## Verify — the COMPUTED style, in a browser
 
 The declaration looks identical whether the property resolves or not, so reading
@@ -253,6 +263,12 @@ A resolved token gives a real color (`rgb(...)`); an undefined one gives the
 inherited value — that difference is the check. Do the same for
 `borderRadius`/`borderColor` when you set them. If no browser tool is available,
 say `styling not browser-verified` rather than calling it done.
+
+This check applies only when the value becomes a CSS declaration. If a
+component passes the value directly to a drawing API, there may be no
+corresponding computed style to inspect; verify the rendered result and, when
+necessary, inspect the component's frontend implementation to confirm whether it
+resolves CSS custom properties.
 
 The same check catches a dead theme variant, because a variant the theme does not
 style computes exactly like the component with no variant at all:
@@ -271,6 +287,8 @@ same type — if the two match, the variant did nothing.
 - A `LUMO_*` theme variant in an Aura app (or `AURA_*` in a Lumo app) whose
   variant string the active theme does not style — it compiles and does nothing.
 - A guessed token name — confirm it in the active theme's stylesheet first.
+- Passing `var(...)` to a component option consumed directly by a drawing API
+  unless the component explicitly resolves CSS custom properties before drawing.
 - Inline `getStyle().set(...)` for a look that a component theme variant or a
   reusable CSS class already provides.
 - A repeated inline style across several components instead of one CSS class in

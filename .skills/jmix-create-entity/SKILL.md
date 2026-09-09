@@ -97,6 +97,15 @@ merely needs to be UNIQUE, which is a unique index on an ordinary column, not an
 id. Match the Liquibase column type to the Java type (`bigint` for `Long`, not
 `${uuid.type}`).
 
+**Inherited key from a framework `@MappedSuperclass`** — when the entity extends a
+base class the framework ships (the application-settings base, and other add-on
+base classes), the key is declared there already. Write NO `@Id`, no
+`@JmixGeneratedValue` and no `@Version` on the subclass. Read that superclass
+before writing the changelog: it decides the id column's name AND type — an `int`
+or `bigint` key is common there, so `${uuid.type}` is the wrong default — and it
+often contributes further columns (a version, a tenant column) that the table must
+still create even though no field in the subclass mentions them.
+
 ## Required references — BOTH annotations, or the field is not really required
 
 A required `@ManyToOne` needs the constraint in two places:
@@ -152,6 +161,33 @@ inspection, and a green `clean test` all pass with the index in the changelog on
 It breaks Studio round-tripping and the code-as-source-of-truth convention, and it
 is found by nothing but this check. Do it as you write the column, not as a later
 audit.
+
+### Make it unique when the column is a natural key
+
+For a single-column natural key that must be unique, add `unique = true` to the
+`@Index` and mirror it with `unique="true"` on the `<createIndex>`:
+
+```java
+@Table(name = "DEPARTMENT", indexes = @Index(
+        name = "IDX_DEPARTMENT_ON_NAME", columnList = "NAME", unique = true))
+```
+
+```xml
+<createIndex indexName="IDX_DEPARTMENT_ON_NAME" tableName="DEPARTMENT" unique="true">
+    <column name="NAME"/>
+</createIndex>
+```
+
+For a rule that spans several columns, use a unique **constraint** rather than a
+unique index — `@Table(uniqueConstraints = @UniqueConstraint(name = "UK_ORDER_LINE",
+columnNames = {"ORDER_ID", "PRODUCT_ID"}))` paired with `<addUniqueConstraint
+tableName="ORDER_LINE" columnNames="ORDER_ID, PRODUCT_ID"
+constraintName="UK_ORDER_LINE"/>`. Same name on both sides, as above.
+
+One rule neither can express: a **case-insensitive** uniqueness constraint cannot be
+declared with `@Index`/`@UniqueConstraint` at all — it needs a functional index on
+`lower(column)` and dialect-specific SQL, so decide it at design time, not when
+writing the changelog.
 
 ## Required-field defaults — at the ENTITY layer, not elsewhere
 
@@ -224,6 +260,14 @@ pattern see `jmix-add-entity-event-listener`.
 | Default set in an `EntityChangedEvent` listener    | The listener fires AFTER persist — too late for `@NotNull`. It reacts to saves; it does not default them. |
 | Default set only in the calling UI controller      | Programmatic paths (services, REST, tests) bypass it. |
 
+## Accessors
+
+Match what the project's entities already do. A codebase where every entity carries
+`@Getter @Setter` is a working configuration — the enhancer runs over those classes
+and the suite passes — so writing the one new entity with hand-written accessors
+makes it the odd one out for a breakage that does not occur. In a project with
+hand-written accessors, write them by hand.
+
 ## Composition Checklist
 
 For parent-child aggregates:
@@ -262,6 +306,19 @@ Add audit fields with the Spring Data annotations from `org.springframework.data
 ## Calculated and Transient Properties
 
 Non-persistent derived attributes use `@JmixProperty` + `@Transient` + `@DependsOnProperties({"a", "b"})` (`@JmixProperty` from `io.jmix.core.metamodel.annotation`). The same applies to an `@InstanceName` method: it must carry `@DependsOnProperties` listing every attribute it reads so they are fetched.
+
+## File attributes
+
+Use `FileRef` for an uploaded file reference. The JPA converter is applied automatically:
+
+```java
+import io.jmix.core.FileRef;
+
+@Column(name = "SCAN_FILE", length = 1024)
+private FileRef scanFile;
+```
+
+Map the matching Liquibase column as `varchar(1024)`.
 
 ## Embeddable, Inheritance, and Data Stores
 
@@ -305,7 +362,7 @@ Apply common Java validation and persistence mappings when the field semantics a
 
 - Missing `@JmixEntity`.
 - Constructor-based entity creation.
-- Lombok annotations (`@Data`, `@Getter`, `@Setter`, etc.) on Jmix entities — they interfere with the entity enhancer and break JPA/Jmix metadata.
+- `@Data`, `@EqualsAndHashCode` or `@ToString` on a Jmix entity: they generate `equals`/`hashCode`/`toString` over mutable persistent fields, replacing the identity semantics the framework relies on and touching lazy references while doing it.
 - `FetchType.EAGER`.
 - Missing Liquibase changelog for persistent changes.
 - A required `@ManyToOne` with `optional = false` but no `@JoinColumn(nullable = false)` — the metamodel then treats it as optional and the UI does not require it.
