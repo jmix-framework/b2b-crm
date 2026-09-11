@@ -17,6 +17,7 @@ Use this skill when adding or changing a database-backed Jmix entity.
 4. Add `@Version`.
 5. Add `@InstanceName` on a stable human-readable field or method.
 6. Define columns with exact `nullable`, `length`, `precision`, and `scale` constraints from requirements.
+   **Check every column name against the reserved words of every targeted dialect** — see "Column names" below.
 7. Use `FetchType.LAZY` for relationships.
 8. Create the Liquibase changelog using `jmix-create-liquibase-changelog`.
 9. Add entity and attribute message keys using `jmix-add-i18n-keys`.
@@ -57,6 +58,24 @@ public class Customer {
     // getters and setters
 }
 ```
+
+## Column names
+
+A column name derived from the field name may be an SQL **reserved word**, and
+the dialects a project targets do not agree about which words those are. The
+check is per dialect, not per SQL standard: a green suite against the test store
+proves nothing about the production store.
+
+- **PostgreSQL:** `select catcode from pg_get_keywords() where word = '<lower-case name>'`
+  — `reserved` cannot be used as an identifier at all. `END` is reserved;
+  `START`, `LANGUAGE`, `TEXT`, `TYPE` and `NAME` are unreserved and fine.
+- **HSQLDB** (the usual test store): default settings accept SQL-standard
+  keywords as identifiers, so it will NOT warn you — `START`, `END` and
+  `LANGUAGE` all pass there in DDL, INSERT, SELECT and UPDATE.
+
+Rename the field or give it an explicit prefixed `@Column(name = "...")`. Common
+offenders an entity field naturally produces: `end`, `order`, `user`, `group`,
+`desc`, `references`.
 
 ## Id strategy — an explicit choice, not a default
 
@@ -273,7 +292,7 @@ hand-written accessors, write them by hand.
 For parent-child aggregates:
 
 - Parent collection has `@Composition`.
-- Parent collection has `@OnDelete(DeletePolicy.CASCADE)` when child lifecycle belongs to parent.
+- Parent collection has `@OnDelete(DeletePolicy.CASCADE)` when child lifecycle belongs to parent **and the parent is soft-deleted** — for a hard-deleted parent see the branch below.
 - Child has a non-null back reference to parent.
 - Child `@ManyToOne` uses `fetch = FetchType.LAZY` and `optional = false`.
 - Child join column is `nullable = false`.
@@ -299,9 +318,45 @@ private List<ChildLine> lines;  // leave uninitialized — Jmix returns a NotIns
 private Parent parent;
 ```
 
+### Cascade for a hard-deleted parent
+
+`@OnDelete(DeletePolicy.CASCADE)` is an application-layer policy, and Jmix applies it
+only to a parent that supports soft delete. On a parent with no `@DeletedDate`/`@DeletedBy`
+the annotation does nothing and the children are orphaned.
+
+For a hard-deleted parent, put the cascade on the child's foreign key in the changelog
+instead:
+
+```xml
+<addForeignKeyConstraint baseTableName="CHILD_LINE" baseColumnNames="PARENT_ID"
+                         constraintName="FK_CHILD_LINE_ON_PARENT"
+                         referencedTableName="PARENT" referencedColumnNames="ID"
+                         onDelete="CASCADE"/>
+```
+
+`jmix-create-liquibase-changelog` presents a DB-level `onDelete="CASCADE"` as the option
+you almost never want, because it assumes the Jmix default of soft delete. A hard-deleted
+composition parent is the exception that wording allows for.
+
 ## Auditing and Soft Delete
 
 Add audit fields with the Spring Data annotations from `org.springframework.data.annotation`: `@CreatedBy`, `@CreatedDate`, `@LastModifiedBy`, `@LastModifiedDate`. For soft delete add `@DeletedBy` and `@DeletedDate` from `io.jmix.core.annotation` — soft-deleted rows are then auto-filtered out of `DataManager`/JPQL queries.
+
+That filter applies to **writes** as well as to the queries the application issues. 
+Inserting or updating a row whose reference points at a soft-deleted entity fails — with a message that names the wrong cause:
+
+```
+IllegalStateException: During synchronization a new object was found through
+a relationship that was not marked cascade PERSIST
+```
+
+If a reference to a soft-deleted row is a legal state in the model (a child that may sit beneath a deleted parent), the save must carry the hint:
+
+```java
+dataManager.save(new SaveContext()
+        .setHint(PersistenceHints.SOFT_DELETION, false)
+        .saving(entity));
+```
 
 ## Calculated and Transient Properties
 

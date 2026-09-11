@@ -244,6 +244,12 @@ Before finishing, check:
 
 - Every created persistent record is removed in `@AfterEach`, using the same authentication level needed for deletion.
 - Cleanup reloads by id then removes instead of removing the instance that can be stale.
+- A **soft-deletable** entity (one carrying `@DeletedDate`/`@DeletedBy`) is NOT removed by `dataManager.remove` — the row is only stamped, stays in the store for every later run, and stays visible to any query issued with soft deletion off. Teardown that must leave the store clean removes it hard:
+    ```java
+    dataManager.save(new SaveContext()
+            .setHint(PersistenceHints.SOFT_DELETION, false)
+            .removing(entity));
+    ```
 - Test data has unique values to avoid collisions.
 - Assertions verify persisted or visible behavior, not just absence of exceptions.
 - UI tests that depend on who is viewing the data authenticate as a real database user around navigation, interaction, and assertions.
