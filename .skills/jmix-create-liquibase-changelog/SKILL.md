@@ -42,6 +42,15 @@ Jmix add-on that owns database tables.
 | FileRef | `varchar(1024)` |
 | Enum id string | `varchar(50)` |
 
+A column NAME is not a free choice either: if it is a reserved word in any
+targeted dialect the `createTable` fails there, and the dialects disagree —
+PostgreSQL rejects `END` outright (check with
+`select catcode from pg_get_keywords() where word = '<lower-case name>'`) while
+HSQLDB accepts SQL-standard keywords as identifiers by default and never warns.
+Liquibase emits the name unquoted, so this surfaces only when the changelog
+first reaches the production dialect. Rename instead of quoting. See
+`jmix-create-entity` (Column names).
+
 An entity with an **assigned natural key** takes the id column type of its Java
 field — `bigint` for a `Long` id, not `${uuid.type}`. See `jmix-create-entity`
 (Id strategy).
@@ -195,11 +204,35 @@ Order the parent first, the child (with its FK) second:
 </changeSet>
 ```
 
-For a **composition** child, the delete cascade is enforced by Jmix at the
-application layer (`@Composition` + `@OnDelete(DeletePolicy.CASCADE)` on the
-entity), NOT by the database — Jmix uses soft delete by default, so a DB-level
-`onDelete="CASCADE"` would never fire. Leave the FK without `onDelete` unless
-you specifically need hard-delete DB-level enforcement.
+For a **composition** child, which layer actually removes the child rows depends
+on the **parent's** deletion traits. Check them before choosing `onDelete`:
+
+- **Parent carries `@DeletedDate`/`@DeletedBy`** (soft delete): the cascade is
+  enforced by Jmix at the application layer (`@Composition` +
+  `@OnDelete(DeletePolicy.CASCADE)` on the entity), NOT by the database. The
+  parent row is never physically deleted, so a DB-level `onDelete="CASCADE"`
+  would not fire. Leave the FK without `onDelete`.
+- **Parent carries neither** (hard delete): the application-layer policy never
+  runs, so the annotation is inert and the database clause is the ONLY thing that removes the children. 
+  The child's FK MUST carry `onDelete="CASCADE"`.
+
+## Two referential actions on one row
+
+`onDelete` is not an independent per-constraint choice once two foreign keys can
+act on the **same row in one statement**. The common shape is a self-referencing
+table that also belongs to a cascading owner:
+
+```
+EMPLOYEE(DEPARTMENT_ID -> DEPARTMENT ON DELETE CASCADE,
+         MANAGER_ID    -> EMPLOYEE   ON DELETE SET NULL)
+```
+
+Deleting a department whose head reports to a manager in that same department
+makes `FK_EMPLOYEE_ON_DEPARTMENT` delete the row while `FK_EMPLOYEE_ON_MANAGER`
+sets its `MANAGER_ID` to null. 
+
+In this case, separate statements from the application side: clear or delete the self-references first, 
+then delete the owner.
 
 ## Root Changelog Reachability
 

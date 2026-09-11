@@ -4,19 +4,26 @@ import com.company.crm.AbstractUiTest;
 import com.company.crm.ai.view.conversation.AiConversationStarterView;
 import com.company.crm.ai.view.conversation.composer.AiConversationComposerFragment;
 import com.company.crm.model.client.Client;
+import com.company.crm.model.order.Order;
+import com.company.crm.model.order.OrderStatus;
+import com.company.crm.view.client.ClientCategory;
 import com.company.crm.view.client.ClientDetailView;
 import com.company.crm.view.client.ClientListView;
 import io.jmix.core.Id;
 import io.jmix.core.IdSerialization;
 import io.jmix.flowui.component.grid.DataGrid;
+import io.jmix.flowui.component.select.JmixSelect;
 import io.jmix.flowui.kit.action.Action;
 import io.jmix.flowui.kit.component.button.JmixButton;
+import io.jmix.flowui.model.CollectionContainer;
 import io.jmix.flowui.testassist.UiTestUtils;
 import io.jmix.flowui.testassist.dialog.DialogInfo;
+import io.jmix.flowui.view.ViewControllerUtils;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 
+import java.time.LocalDate;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +44,24 @@ class ClientViewsTest extends AbstractUiTest {
     void opensClientDetailView() {
         var view = viewTestSupport.navigateToNewEntityDetail(Client.class, ClientDetailView.class);
         assertThat(view).isInstanceOf(ClientDetailView.class);
+    }
+
+    @Test
+    void withPaymentsCategoryShowsAClientWithSeveralPaidInvoicesOnce() {
+        Client client = entities.client("Client With Payments");
+        Order firstOrder = entities.order(client, LocalDate.now(), OrderStatus.DONE);
+        Order secondOrder = entities.order(client, LocalDate.now(), OrderStatus.DONE);
+        entities.payment(entities.invoice(client, firstOrder), LocalDate.now());
+        entities.payment(entities.invoice(client, secondOrder), LocalDate.now());
+        entities.client("Client Without Payments");
+
+        ClientListView view = viewTestSupport.navigateTo(ClientListView.class);
+        JmixSelect<ClientCategory> categorySelect = UiTestUtils.getComponent(view, "categorySelect");
+        CollectionContainer<Client> clientsDc = ViewControllerUtils.getViewData(view).getContainer("clientsDc");
+
+        categorySelect.setValue(ClientCategory.WITH_PAYMENTS);
+
+        assertThat(clientsDc.getItems()).containsExactly(client);
     }
 
     @Test

@@ -69,6 +69,25 @@ you broke it and fix it to green. Do not call that failure "pre-existing". On th
 first Gate 2 run of a freshly generated project, inspect the JUnit XML and build
 dependencies before deciding whether your changes caused the failure.
 
+Common causes when a seed test goes red after your change:
+
+- **`NoSuchViewException` after you added views** → you broke the VIEW REGISTRY;
+  it scans all `@ViewController` classes at startup and one broken view poisons
+  navigation to EVERY view, including pre-existing ones. Check, in order: (1) every
+  new view `.java` has a `package` line matching its directory — a class in the
+  default package registers its `@Route`/`@ViewController` wrong; (2) no two
+  `@ViewController(id=…)` share an id; (3) every `@ViewDescriptor` path resolves
+  to a real XML next to the class; (4) no `*-view.xml` is empty or malformed — an
+  empty descriptor throws `SAXParseException: Premature end of file` and poisons
+  the registry.
+- **`MetaClass not found for class X`** → the entity is missing `@JmixEntity`, or
+  its package is outside the application scan root.
+- **`ConstraintViolationException` on save** → a `@NotNull` persistent field has
+  no value on the `DataManager` path (see `jmix-create-entity`).
+
+A test that goes red and you cannot explain is a blocker, never a footnote in
+your "done" summary.
+
 A green Gate 2 is necessary but NOT sufficient: the seed tests load the context
 but do NOT open your new views, exercise your new roles, or fire code that only
 runs outside a user request (see `jmix-run-background-code`). It catches catastrophic 

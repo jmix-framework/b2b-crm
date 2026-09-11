@@ -10,7 +10,6 @@ import com.company.crm.model.payment.Payment;
 import com.company.crm.model.payment.PaymentRepository;
 import com.company.crm.view.main.MainView;
 import com.vaadin.flow.component.AttachEvent;
-import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.data.renderer.Renderer;
 import com.vaadin.flow.router.Route;
 import io.jmix.core.querycondition.LogicalCondition;
@@ -41,6 +40,7 @@ import java.util.List;
 
 import static com.company.crm.app.util.ui.CrmUiUtils.addRowSelectionInMultiSelectMode;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.addCondition;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.applyFiltersOnValueChange;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.installSortByCreatedDate;
 import static com.company.crm.view.payment.PaymentListView.ROUTE;
 import static io.jmix.core.querycondition.PropertyCondition.equal;
@@ -163,9 +163,9 @@ public class PaymentListView extends StandardListView<Payment> {
     }
 
     private void registerUrlQueryParametersBinders() {
-        List.<HasValue<?, ?>>of(payments_ClientComboBox, payments_OrderComboBox,
-                        payments_InvoiceComboBox, payments_FromDatePicker, payments_ToDatePicker)
-                .forEach(field -> field.addValueChangeListener(e -> applyFilters()));
+        applyFiltersOnValueChange(paymentsDl, this::applyFilters,
+                payments_ClientComboBox, payments_OrderComboBox, payments_InvoiceComboBox,
+                payments_FromDatePicker, payments_ToDatePicker);
 
         FieldValueQueryParameterBinder.builder(UiComponentUtils.getCurrentView())
                 .addComboboxBinding(payments_OrderComboBox, () -> ordersDc.getItems())

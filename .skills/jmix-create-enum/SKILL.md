@@ -16,7 +16,7 @@ Use this skill when an entity attribute has a fixed set of values.
 1. Create the enum in the `entity` package.
 2. Implement `io.jmix.core.metamodel.datatype.EnumClass<T>`.
 3. Use stable database ids, not display labels.
-4. Add a typed `fromId()` method annotated with `@Nullable`.
+4. Add a typed `fromId()` method annotated with `@Nullable` from `org.jspecify.annotations`.
 5. Store the enum id type in the entity field.
 6. Add getter/setter conversion in the entity.
 7. Add Liquibase column matching the id type.
@@ -26,7 +26,7 @@ Use this skill when an entity attribute has a fixed set of values.
 
 ```java
 import io.jmix.core.metamodel.datatype.EnumClass;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public enum TransactionType implements EnumClass<String> {
     INCOME("INCOME"),

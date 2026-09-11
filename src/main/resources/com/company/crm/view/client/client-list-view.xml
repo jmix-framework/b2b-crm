@@ -6,11 +6,7 @@
             <fetchPlan extends="_base">
                 <property name="accountManager" fetchPlan="_base"/>
             </fetchPlan>
-            <loader id="clientsDl" readOnly="true">
-                <query>
-                    <![CDATA[select distinct c from Client c order by c.createdDate]]>
-                </query>
-            </loader>
+            <loader id="clientsDl" readOnly="true"/>
         </collection>
     </data>
     <facets>

@@ -133,11 +133,14 @@ Do not rely on similar casing such as `CreateOrderButton.text` or `createorderBu
 
 ### 2. Verify translated values
 
-When `jmix.core.available-locales` does not include `en`, read every complete
-`messages_<locale>.properties` file, not only the lines changed during the task.
-Project templates can contain English values under keys that resolve correctly,
-so the reference audit does not detect them. Check seed keys for the login view,
-main view, menu, and user entity as well as newly added keys.
+Every locale bundle other than the one whose language the keys are authored in must be reviewed for leftover template
+values — including in an `en,<other>` application, where the second bundle is generated as an English template and every
+key in it resolves.
+
+Read each such `messages_<locale>.properties` file complete, not only the lines
+changed during the task. Project templates can contain English values under keys
+that resolve correctly, so the reference audit does not detect them. Check seed keys
+for the login view, main view, menu, and user entity as well as newly added keys.
 
 For a locale that normally uses non-Latin text, use this search to find likely
 English values left from the template:
@@ -153,6 +156,12 @@ be valid. Values such as `MainView.title=App`, `User=User`, or
 `loginForm.username=Username` usually require translation in a non-English-only
 application.
 
+When the task adds keys to a bundle that is still an untouched template, pick one of
+two outcomes and say which — translating the whole bundle, or translating only the
+new keys and recording the rest as a known gap. Both are defensible. Translating the
+new keys and silently leaving the seed keys is not: it produces a half-translated UI
+that reads as an oversight.
+
 ## Forbidden
 
 - Hardcoded user-visible text in XML or Java controllers.
@@ -163,5 +172,5 @@ application.
 - `${0}` placeholders in `formatMessage`; use Java formatter placeholders such as `%s`.
 - Copies of framework or add-on message bundles created before checking for an
   official `jmix-translations-<lang>` artifact.
-- English template values left in a non-English-only application bundle without
-  explicit review.
+- English template values left without explicit review in any locale bundle other
+  than the one the keys are authored in — an `en,<other>` application included.

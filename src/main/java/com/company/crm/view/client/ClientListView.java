@@ -26,7 +26,6 @@ import com.vaadin.flow.component.AbstractField.ComponentValueChangeEvent;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasSize;
-import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.component.Unit;
 import com.vaadin.flow.component.card.Card;
 import com.vaadin.flow.component.html.H1;
@@ -77,7 +76,9 @@ import static com.company.crm.app.util.ui.CrmUiUtils.addRowSelectionInMultiSelec
 import static com.company.crm.app.util.ui.CrmUiUtils.openLink;
 import static com.company.crm.app.util.ui.CrmUiUtils.setSearchHintPopover;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.addCondition;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.applyFiltersOnValueChange;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.installSortByCreatedDate;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.resetToFirstPage;
 import static com.company.crm.view.client.ClientListView.ROUTE;
 import static io.jmix.core.querycondition.PropertyCondition.contains;
 import static io.jmix.core.querycondition.PropertyCondition.equal;
@@ -180,6 +181,10 @@ public class ClientListView extends StandardListView<Client> {
         if (!isFromClient) {
             return;
         }
+
+        // the value change of accountManagerSelect below is programmatic, so it reloads without resetting
+        // the page on its own
+        resetToFirstPage(clientsDl);
 
         if (event.getValue()) {
             accountManagerSelect.setValue(getCurrentUser());
@@ -472,8 +477,8 @@ public class ClientListView extends StandardListView<Client> {
 
         setSearchHintPopover(searchField);
 
-        List.<HasValue<?, ?>>of(searchField, typeSelect, accountManagerSelect, categorySelect)
-                .forEach(field -> field.addValueChangeListener(e -> applyFilters()));
+        applyFiltersOnValueChange(clientsDl, this::applyFilters,
+                searchField, typeSelect, accountManagerSelect, categorySelect);
 
         List<User> finalAccountManagers = hasOnlyMyAccounts
                 ? List.of(getCurrentUser())
@@ -522,7 +527,6 @@ public class ClientListView extends StandardListView<Client> {
         categorySelect.getOptionalValue().ifPresent(value -> {
             switch (value) {
                 case WITH_ORDERS -> filtersCondition.add(isCollectionEmpty("orders", false));
-                // FIXME: distinct does not work here for some reason
                 case WITH_PAYMENTS -> filtersCondition.add(isCollectionEmpty("invoices.payments", false));
             }
         });
