@@ -19,7 +19,6 @@ import com.company.crm.view.main.MainView;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.component.Unit;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
@@ -68,6 +67,7 @@ import static com.company.crm.app.util.ui.CrmUiUtils.addRowSelectionInMultiSelec
 import static com.company.crm.app.util.ui.CrmUiUtils.setBadge;
 import static com.company.crm.app.util.ui.color.EnumClassColors.getBadgeVariant;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.addCondition;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.applyFiltersOnValueChange;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.installSortByCreatedDate;
 import static com.company.crm.view.invoice.InvoiceListView.ROUTE;
 import static io.jmix.core.querycondition.PropertyCondition.equal;
@@ -301,8 +301,9 @@ public class InvoiceListView extends StandardListView<Invoice> {
     }
 
     private void registerUrlQueryParametersBinders() {
-        List.<HasValue<?, ?>>of(invoices_ClientComboBox, invoices_OrderComboBox, invoices_StatusSelect, invoices_FromDatePicker, invoices_ToDatePicker)
-                .forEach(field -> field.addValueChangeListener(e -> applyFilters()));
+        applyFiltersOnValueChange(invoicesDl, this::applyFilters,
+                invoices_ClientComboBox, invoices_OrderComboBox, invoices_StatusSelect,
+                invoices_FromDatePicker, invoices_ToDatePicker);
 
         //noinspection unchecked
         FieldValueQueryParameterBinder.builder(getCurrentView())

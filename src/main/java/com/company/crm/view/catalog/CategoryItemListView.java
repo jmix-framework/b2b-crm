@@ -11,7 +11,6 @@ import com.company.crm.model.catalog.item.CategoryItem;
 import com.company.crm.model.catalog.item.CategoryItemRepository;
 import com.company.crm.view.main.MainView;
 import com.vaadin.flow.component.AttachEvent;
-import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.data.renderer.Renderer;
 import com.vaadin.flow.router.Route;
 import io.jmix.core.querycondition.LogicalCondition;
@@ -43,6 +42,7 @@ import java.util.List;
 import static com.company.crm.app.util.ui.CrmUiUtils.addRowSelectionInMultiSelectMode;
 import static com.company.crm.app.util.ui.CrmUiUtils.setSearchHintPopover;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.addCondition;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.applyFiltersOnValueChange;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.installSortByCreatedDate;
 import static com.company.crm.view.catalog.CategoryItemListView.ROUTE;
 import static io.jmix.core.querycondition.PropertyCondition.contains;
@@ -168,8 +168,8 @@ public class CategoryItemListView extends StandardListView<CategoryItem> {
         items_categorySelect.setItems(categories);
 
         setSearchHintPopover(items_searchField);
-        List.<HasValue<?, ?>>of(items_searchField, items_categorySelect)
-                .forEach(field -> field.addValueChangeListener(e -> applyFilters()));
+        applyFiltersOnValueChange(categoryItemsDl, this::applyFilters,
+                items_searchField, items_categorySelect);
 
         //noinspection unchecked
         FieldValueQueryParameterBinder.builder(this)

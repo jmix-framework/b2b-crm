@@ -13,13 +13,13 @@ import com.company.crm.model.order.OrderRepository;
 import com.company.crm.model.order.OrderStatus;
 import com.company.crm.view.invoice.InvoiceDetailView;
 import com.company.crm.view.main.MainView;
-import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.data.renderer.Renderer;
 import com.vaadin.flow.data.renderer.TextRenderer;
 import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
 import io.jmix.core.Messages;
 import io.jmix.core.metamodel.datatype.DatatypeFormatter;
+import io.jmix.core.querycondition.Condition;
 import io.jmix.core.querycondition.LogicalCondition;
 import io.jmix.core.repository.JmixDataRepositoryContext;
 import io.jmix.flowui.DialogWindows;
@@ -44,23 +44,28 @@ import io.jmix.flowui.view.ViewDescriptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.company.crm.app.util.ui.CrmUiUtils.addColumnHeaderCurrencySuffix;
 import static com.company.crm.app.util.ui.CrmUiUtils.addRowSelectionInMultiSelectMode;
 import static com.company.crm.app.util.ui.CrmUiUtils.setSearchHintPopover;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.addCondition;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.applyFiltersOnValueChange;
 import static com.company.crm.app.util.ui.datacontext.DataContextUtils.installSortByCreatedDate;
+import static com.company.crm.app.util.ui.datacontext.DataContextUtils.resetToFirstPage;
 import static com.company.crm.model.datatype.PriceDataType.formatWithoutCurrency;
 import static com.company.crm.view.order.OrderListView.ROUTE;
 import static io.jmix.core.querycondition.PropertyCondition.equal;
 import static io.jmix.core.querycondition.PropertyCondition.greaterOrEqual;
+import static io.jmix.core.querycondition.PropertyCondition.inList;
 import static io.jmix.core.querycondition.PropertyCondition.lessOrEqual;
 
 @Route(value = ROUTE, layout = MainView.class)
@@ -72,6 +77,9 @@ import static io.jmix.core.querycondition.PropertyCondition.lessOrEqual;
 public class OrderListView extends StandardListView<Order> {
 
     public static final String ROUTE = "orders";
+
+    private static final String SELECTED_STATUS_PARAM = "selected_status";
+    private static final String SELECTED_STATUS_SEPARATOR = ",";
 
     @Autowired
     private Messages messages;
@@ -102,14 +110,19 @@ public class OrderListView extends StandardListView<Order> {
     @ViewComponent
     private OrderStatusPipeline pipeLineFilter;
     @ViewComponent
-    private CollectionContainer<Order> ordersDc;
-    @ViewComponent
     private DataGrid<Order> ordersDataGrid;
 
     private final LogicalCondition filtersCondition = LogicalCondition.and();
 
-    private Optional<OrderStatus> selectedStatus = Optional.empty();
+    private Set<OrderStatus> selectedStatuses = Set.of();
     private SimpleUrlQueryParametersBinder selectedStatusUrlParameterBinder;
+
+    /**
+     * The context the data loader was last loaded with. It carries the conditions of the advanced filter,
+     * which are owned by the loader and not by {@link #filtersCondition}, so the pipeline counts need it to
+     * stay consistent with the grid.
+     */
+    private JmixDataRepositoryContext lastRepositoryContext = JmixDataRepositoryContext.builder().build();
 
     @Subscribe
     private void onInit(final InitEvent event) {
@@ -127,6 +140,7 @@ public class OrderListView extends StandardListView<Order> {
 
     @Install(to = "ordersDl", target = Target.DATA_LOADER, subject = "loadFromRepositoryDelegate")
     private List<Order> loadDelegate(Pageable pageable, JmixDataRepositoryContext context) {
+        lastRepositoryContext = context;
         return orderRepository.findAll(pageable, addCondition(context, filtersCondition)).getContent();
     }
 
@@ -208,9 +222,8 @@ public class OrderListView extends StandardListView<Order> {
     private void initializeFilterFields() {
         initializePipelineFilter();
         setSearchHintPopover(searchField);
-        List.<HasValue<?, ?>>of(searchField, clientComboBox, fromDatePicker, toDatePicker).forEach(field -> {
-            field.addValueChangeListener(e -> applyFilters());
-        });
+        applyFiltersOnValueChange(ordersDl, this::applyFilters,
+                searchField, clientComboBox, fromDatePicker, toDatePicker);
     }
 
     private void configureGrid() {
@@ -230,10 +243,26 @@ public class OrderListView extends StandardListView<Order> {
                 .build();
 
         selectedStatusUrlParameterBinder = SimpleUrlQueryParametersBinder.registerBinder(this,
-                () -> QueryParameters.of("selected_status",
-                        selectedStatus.map(s -> s.getId().toString()).orElse("")),
-                qp -> qp.getSingleParameter("selected_status").ifPresent(id ->
-                        selectedStatus = Optional.ofNullable(OrderStatus.fromStringId(id))));
+                () -> QueryParameters.of(SELECTED_STATUS_PARAM, serializeSelectedStatuses()),
+                qp -> qp.getSingleParameter(SELECTED_STATUS_PARAM).ifPresent(ids ->
+                        selectedStatuses = deserializeStatuses(ids)));
+    }
+
+    private String serializeSelectedStatuses() {
+        return selectedStatuses.stream()
+                .map(status -> status.getId().toString())
+                .collect(Collectors.joining(SELECTED_STATUS_SEPARATOR));
+    }
+
+    private static Set<OrderStatus> deserializeStatuses(String ids) {
+        EnumSet<OrderStatus> statuses = EnumSet.noneOf(OrderStatus.class);
+        for (String id : ids.split(SELECTED_STATUS_SEPARATOR)) {
+            OrderStatus status = OrderStatus.fromStringId(id);
+            if (status != null) {
+                statuses.add(status);
+            }
+        }
+        return Collections.unmodifiableSet(statuses);
     }
 
     private void applyFilters() {
@@ -243,85 +272,80 @@ public class OrderListView extends StandardListView<Order> {
 
     private void updateFiltersCondition() {
         filtersCondition.getConditions().clear();
-        addSearchConditions();
+        nonStatusConditions().forEach(filtersCondition::add);
+        selectedStatusesCondition().ifPresent(filtersCondition::add);
     }
 
-    private void addSearchConditions() {
-        addSearchBySelectedStatus();
-        addSearchByNumberCondition();
-        addSearchByClientCondition();
-        addDateRangeConditions();
+    /**
+     * Returns the conditions of every filter except the status pipeline. The pipeline counts reuse them:
+     * each status has to be counted as if it were the selected one.
+     */
+    private List<Condition> nonStatusConditions() {
+        List<Condition> conditions = new ArrayList<>();
+        searchField.getOptionalValue().ifPresent(number -> conditions.add(equal("number", number)));
+        clientComboBox.getOptionalValue().ifPresent(client -> conditions.add(equal("client", client)));
+        fromDatePicker.getOptionalValue().ifPresent(fromDate -> conditions.add(greaterOrEqual("date", fromDate)));
+        toDatePicker.getOptionalValue().ifPresent(toDate -> conditions.add(lessOrEqual("date", toDate)));
+        return conditions;
     }
 
-    private void addSearchBySelectedStatus() {
-        selectedStatus.ifPresent(status ->
-                filtersCondition.add(equal("status", status)));
-    }
-
-    private void addSearchByNumberCondition() {
-        searchField.getOptionalValue().ifPresent(name ->
-                filtersCondition.add(equal("number", name)));
-    }
-
-    private void addSearchByClientCondition() {
-        clientComboBox.getOptionalValue().ifPresent(client ->
-                filtersCondition.add(equal("client", client)));
-    }
-
-    private void addDateRangeConditions() {
-        addSearchByFromDateCondition();
-        addSearchByToDateCondition();
-    }
-
-    private void addSearchByFromDateCondition() {
-        fromDatePicker.getOptionalValue().ifPresent(fromDate ->
-                filtersCondition.add(greaterOrEqual("date", fromDate)));
-    }
-
-    private void addSearchByToDateCondition() {
-        toDatePicker.getOptionalValue().ifPresent(fromDate ->
-                filtersCondition.add(lessOrEqual("date", fromDate)));
+    private Optional<Condition> selectedStatusesCondition() {
+        return selectedStatuses.isEmpty()
+                ? Optional.empty()
+                : Optional.of(inList("status", List.copyOf(selectedStatuses)));
     }
 
     private void initializePipelineFilter() {
-        pipeLineFilter.selectStatus(selectedStatus.orElse(null));
+        updatePipelineSelection();
         pipeLineFilter.addStatusClickListener(this::onStatusFilterClick);
     }
 
+    /**
+     * Adds the clicked status to the selection, or removes it when it is already selected. An empty
+     * selection means no status filter at all.
+     */
     private void onStatusFilterClick(OrderStatusComponent component) {
-        Optional<OrderStatus> statusOpt = Optional.of(component.getStatus());
-
-        if (selectedStatus.equals(statusOpt)) {
-            selectedStatus = Optional.empty();
-        } else {
-            selectedStatus = statusOpt;
-        }
+        selectedStatuses = toggleStatus(selectedStatuses, component.getStatus());
 
         selectedStatusUrlParameterBinder.fireQueryParametersChanged();
+        updatePipelineSelection();
 
-        pipeLineFilter.deselectAllStatuses();
-        selectedStatus.ifPresent(s -> pipeLineFilter.selectStatus(s));
-
+        resetToFirstPage(ordersDl);
         applyFilters();
     }
 
-    private void updatePipeLineFilter() {
-        Map<OrderStatus, BigDecimal> status2Amount = new HashMap<>();
-        for (OrderStatus status : OrderStatus.values()) {
-            status2Amount.put(status, BigDecimal.ZERO);
+    private static Set<OrderStatus> toggleStatus(Set<OrderStatus> statuses, OrderStatus status) {
+        EnumSet<OrderStatus> result = EnumSet.noneOf(OrderStatus.class);
+        result.addAll(statuses);
+        if (!result.remove(status)) {
+            result.add(status);
         }
+        return Collections.unmodifiableSet(result);
+    }
 
-        ordersDc.getItems().forEach(item -> {
-            OrderStatus status = item.getStatus();
-            BigDecimal currentAmount = status2Amount.getOrDefault(status, BigDecimal.ZERO);
-            status2Amount.put(status, currentAmount.add(BigDecimal.ONE));
+    private void updatePipelineSelection() {
+        pipeLineFilter.deselectAllStatuses();
+        pipeLineFilter.selectStatus(selectedStatuses.toArray(new OrderStatus[0]));
+    }
+
+    private void updatePipeLineFilter() {
+        List<Condition> baseConditions = nonStatusConditions();
+
+        pipeLineFilter.getStatusComponents().forEach(component -> {
+            OrderStatus status = component.getStatus();
+            component.setTitle(messages.getMessage(status) + " (" + countOrders(baseConditions, status) + ")");
         });
+    }
 
-        status2Amount.forEach((status, amount) ->
-                pipeLineFilter.getStatusComponents().forEach(comp -> {
-                    if (comp.getStatus().equals(status)) {
-                        comp.setTitle(messages.getMessage(status) + " (" + amount + ")");
-                    }
-                }));
+    /**
+     * Counts all orders in the given status under the other active filters, not only the ones on the
+     * current page. One count query per status - the enum has four of them.
+     */
+    private long countOrders(List<Condition> baseConditions, OrderStatus status) {
+        List<Condition> conditions = new ArrayList<>(baseConditions);
+        conditions.add(equal("status", status));
+
+        return orderRepository.count(addCondition(lastRepositoryContext,
+                LogicalCondition.and(conditions.toArray(new Condition[0]))));
     }
 }
